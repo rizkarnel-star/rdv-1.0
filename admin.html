@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#493064" />
+  <title>Admin panel | Rendezvous</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <p id="adminGate" class="admin-gate">Checking administrator access...</p>
+  <div class="app-shell admin-shell hidden" id="adminShell">
+    <header class="topbar">
+      <div class="brand-row">
+        <div class="avatar brand-avatar">R</div>
+        <div class="greeting"><h1>Admin panel</h1><p>Campus management</p></div>
+        <div class="admin-header-actions">
+          <a class="outline-button admin-back-link" href="/">Back to app</a>
+          <button class="outline-button" type="button" id="adminLogoutButton">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="page-heading">
+        <p class="eyebrow">CAMPUS MANAGEMENT</p>
+        <h2>Admin panel</h2>
+        <p class="muted">Manage accounts, event approvals, groups, and reports.</p>
+      </div>
+      <div class="admin-tabs" role="tablist">
+        <button class="selected" type="button" data-admin-view="users">Users</button>
+        <button type="button" data-admin-view="events">Events</button>
+        <button type="button" data-admin-view="groups">Groups</button>
+        <button type="button" data-admin-view="reports">Reports</button>
+      </div>
+      <section class="admin-section" id="adminUsers">
+        <h3>Accounts</h3>
+        <p class="muted">To add another administrator, have them create a member account, then change their role here.</p>
+        <p class="muted" id="adminLimitMessage">Administrator accounts: loading</p>
+        <div id="adminUserList" class="admin-list"></div>
+      </section>
+      <section class="admin-section hidden" id="adminEvents"><h3>Event approvals</h3><div id="adminEventList" class="admin-list"></div></section>
+      <section class="admin-section hidden" id="adminGroups">
+        <h3>Campus groups</h3>
+        <form id="groupForm" class="admin-form">
+          <label>Group name<input name="name" required maxlength="100" /></label>
+          <label>Category<select name="category" required><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option></select></label>
+          <label>Description<input name="description" required maxlength="500" /></label>
+          <button class="primary-button" type="submit">Create group</button>
+        </form>
+        <div id="adminGroupList" class="admin-list"></div>
+      </section>
+      <section class="admin-section hidden" id="adminReports"><h3>Event reports</h3><div id="adminReportList" class="admin-list"></div></section>
+    </main>
+  </div>
+  <div class="toast" id="adminToast" role="status" aria-live="polite"></div>
+  <script src="/admin.js"></script>
+</body>
+</html>

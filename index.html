@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#493064" />
+  <title>Rendezvous | Campus Life &amp; Events</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="auth-screen" id="authScreen">
+    <section class="auth-card" aria-labelledby="authTitle">
+      <div class="auth-brand"><span class="avatar brand-avatar">R</span><div><h1>Rendezvous</h1><p>Campus Life &amp; Events</p></div></div>
+      <p class="eyebrow">YOUR CAMPUS COMMUNITY</p>
+      <h2 id="authTitle">Welcome back</h2>
+      <p class="muted" id="authDescription">Sign in to find events and connect with your campus.</p>
+      <p class="notice hidden" id="setupNotice">This app has no accounts yet. The first account created will be the administrator.</p>
+      <form id="loginForm" class="auth-form">
+        <label>Email address<input name="email" type="email" autocomplete="email" required maxlength="254" /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-button" type="submit">Sign in</button>
+      </form>
+      <form id="adminLoginForm" class="auth-form hidden">
+        <label>Administrator email<input name="email" type="email" autocomplete="username" required maxlength="254" /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-button" type="submit">Admin sign in</button>
+        <button class="text-button" id="adminLoginBack" type="button">Back to member sign in</button>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <label>Your name<input name="name" autocomplete="name" required maxlength="100" /></label>
+        <label>Email address<input name="email" type="email" autocomplete="email" required maxlength="254" /></label>
+        <label>Password (at least 12 characters)<input name="password" type="password" autocomplete="new-password" minlength="12" required /></label>
+        <button class="primary-button" type="submit">Create account</button>
+      </form>
+      <button class="text-button" id="authToggle" type="button">New here? Create an account</button>
+      <button class="text-button" id="adminLoginToggle" type="button">Administrator? Sign in here</button>
+    </section>
+  </main>
+
+  <div class="app-shell hidden" id="appShell">
+    <header class="topbar">
+      <div class="brand-row">
+        <div class="avatar brand-avatar">R</div>
+        <div class="greeting"><h1>Hello, <span id="greetingName">there</span></h1><p>Campus Life &amp; Events</p></div>
+        <button class="outline-button" type="button" id="logoutButton">Sign out</button>
+      </div>
+      <div class="search-row">
+        <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search events..." /></label>
+        <button id="filterButton" class="icon-button filter-button" type="button" aria-label="Show filters">☷</button>
+      </div>
+      <div id="filterPanel" class="filter-panel hidden">
+        <label for="categoryFilter">Filter by category</label>
+        <select id="categoryFilter"><option value="all">All categories</option><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option></select>
+      </div>
+    </header>
+
+    <main id="mainContent">
+      <section class="page active" id="homePage">
+        <div class="tabs-row">
+          <button class="pill-tab selected" data-event-filter="upcoming" type="button">▣ Upcoming Events</button>
+          <button class="pill-tab" data-event-filter="trending" type="button">ϟ Popular Events</button>
+          <button class="host-button" id="openHostModal" type="button">＋ Host</button>
+        </div>
+        <div class="section-heading"><div><p class="eyebrow">CAMPUS EVENTS</p><h2>Find your people. Find your thing.</h2></div></div>
+        <div id="eventList" class="event-list"><div class="empty-state">Loading events...</div></div>
+        <div class="quick-links">
+          <button type="button" data-page="calendar"><strong>Calendar</strong><span>Your RSVPs</span></button>
+          <button type="button" data-page="settings"><strong>Settings</strong><span>Your account</span></button>
+          <button type="button" data-page="help"><strong>Help &amp; About</strong><span>Support</span></button>
+          <a href="admin.html" id="adminQuickLink" class="hidden"><strong>Admin panel</strong><span>Manage campus</span></a>
+        </div>
+      </section>
+
+      <section class="page" id="chatsPage"><div class="page-heading"><p class="eyebrow">YOUR CONVERSATIONS</p><h2>Chats</h2><p class="muted">Messages will appear here when conversations are available.</p></div><div class="empty-state">No conversations yet.</div></section>
+
+      <section class="page" id="groupsPage">
+        <div class="page-heading"><p class="eyebrow">CAMPUS COMMUNITIES</p><h2>Groups</h2><p class="muted">Groups created by your campus administrators.</p></div>
+        <div id="groupList" class="group-grid"><div class="empty-state">Loading groups...</div></div>
+      </section>
+
+      <section class="page" id="connectPage"><div class="page-heading"><p class="eyebrow">MEET YOUR CAMPUS</p><h2>Connect</h2><p class="muted">Student connections will appear here when available.</p></div><div class="empty-state">No student profiles to show yet.</div></section>
+
+      <section class="page" id="profilePage">
+        <div class="profile-card">
+          <span class="avatar profile-avatar" id="profileInitial">U</span><p class="eyebrow">YOUR CAMPUS PROFILE</p><h2 id="profileName">Your name</h2><p class="muted" id="profileEmail">Your email</p>
+          <div class="interest-tags"><span id="profileRole">Member</span></div>
+        </div>
+        <div class="settings-list"><button type="button" data-page="calendar">▦ <span>My calendar</span> ›</button><button type="button" data-page="settings">⚙ <span>Account settings</span> ›</button><button type="button" data-page="help">ⓘ <span>Help &amp; support</span> ›</button></div>
+      </section>
+
+      <section class="page simple-page" id="calendarPage"><p class="eyebrow">PLAN AHEAD</p><h2>My Calendar</h2><p class="muted">Events you RSVP to will appear here.</p><div id="calendarEvents" class="empty-state">You haven't joined any events yet.</div></section>
+      <section class="page simple-page" id="settingsPage"><p class="eyebrow">YOUR ACCOUNT</p><h2>Settings</h2><div class="settings-list"><button type="button" id="settingsSignOut">↪ <span>Sign out</span> ›</button></div></section>
+      <section class="page simple-page" id="helpPage"><p class="eyebrow">WE'RE HERE TO HELP</p><h2>Help &amp; About</h2><div class="help-card"><h3>Rendezvous</h3><p>A campus community space to discover events, join groups and meet people.</p><p class="muted">Contact your campus administrator for support.</p></div></section>
+
+    </main>
+
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-page="home" type="button"><span>⌂</span><small>Home</small></button>
+      <button class="nav-item" data-page="chats" type="button"><span>▤</span><small>Chats</small></button>
+      <button class="nav-item" data-page="groups" type="button"><span>♧</span><small>Groups</small></button>
+      <button class="nav-item" data-page="connect" type="button"><span>⇄</span><small>Connect</small></button>
+      <button class="nav-item" data-page="profile" type="button"><span>◉</span><small>Profile</small></button>
+      <a class="nav-item admin-nav-link hidden" href="admin.html" id="adminNav"><span>⚙</span><small>Admin</small></a>
+    </nav>
+  </div>
+
+  <div class="modal-backdrop hidden" id="hostModal">
+    <form class="modal" id="hostForm">
+      <button type="button" class="close-modal" id="closeHostModal" aria-label="Close">×</button>
+      <p class="eyebrow">BRING PEOPLE TOGETHER</p><h2>Host an event</h2>
+      <label>Event name<input name="title" required maxlength="120" /></label>
+      <label>Category<select name="category"><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option></select></label>
+      <label>Date and time<input name="starts_at" type="datetime-local" required /></label>
+      <label>Location<input name="location" required maxlength="160" /></label>
+      <label>Description<textarea name="description" maxlength="1000" rows="3"></textarea></label>
+      <button class="primary-button" type="submit">Submit event</button>
+    </form>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="script.js"></script>
+</body>
+</html>

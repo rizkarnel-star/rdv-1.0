@@ -22,7 +22,7 @@ def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_mapping(
         SECRET_KEY=secret_key or secrets.token_hex(32),
-        DATABASE=str(BASE_DIR / "instance" / "rendezvous.sqlite3"),
+        DATABASE=os.environ.get("DATABASE_PATH", str(BASE_DIR / "instance" / "rendezvous.sqlite3")),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV") == "production",
@@ -120,6 +120,10 @@ def create_app(test_config=None):
             "setup_required": user_count == 0,
             "user": public_user(user) if user is not None and user["status"] == "active" else None,
         })
+
+    @app.get("/healthz")
+    def health():
+        return jsonify({"status": "ok"})
 
     @app.post("/api/auth/register")
     def register():

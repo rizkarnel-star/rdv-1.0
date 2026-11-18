@@ -55,6 +55,44 @@ $env:SECRET_KEY = python -c "import secrets; print(secrets.token_hex(32))"
 python backend.py
 ```
 
+## Deploy the backend for Vercel
+
+Vercel is currently serving the static frontend; it does not automatically run this Flask app. One simple setup is to run the backend as a Render Web Service and proxy `/api/*` requests through Vercel.
+
+1. Push the project to a GitHub repository. Do not include `.env`, secrets, or `instance/rendezvous.sqlite3`.
+2. In Render, create a **Web Service** from that repository.
+3. Use these commands:
+
+   - Build: `pip install -r requirements.txt`
+   - Start: `gunicorn --bind 0.0.0.0:$PORT backend:app`
+   - Health check path: `/healthz`
+
+4. If keeping SQLite, attach a persistent disk mounted at `/var/data`. Set these Render environment variables:
+
+   - `FLASK_ENV` = `production`
+   - `SECRET_KEY` = a new random value (generate one locally; never paste it into chat or commit it)
+   - `DATABASE_PATH` = `/var/data/rendezvous.sqlite3`
+
+   Without persistent storage, the deployed SQLite file may be lost on redeploy or restart. The current backend supports SQLite; using PostgreSQL would require adapting `database.py`.
+
+5. After Render deploys, copy the service URL shown on its dashboard (for example, `https://your-service.onrender.com`). That is the backend URL.
+6. Add a `vercel.json` file at the project root and replace the example host below with that Render URL:
+
+   ```json
+   {
+     "rewrites": [
+       {
+         "source": "/api/(.*)",
+         "destination": "https://your-service.onrender.com/api/$1"
+       }
+     ]
+   }
+   ```
+
+7. Commit and push `vercel.json`, then redeploy the Vercel frontend. The frontend calls `/api/...` on its own domain, and Vercel forwards those requests to Flask. This same-origin proxy keeps the session cookie working without opening the API to arbitrary websites.
+
+The deployed backend starts with an empty database unless you migrate one. In this app, the first registered account becomes the administrator. Keep the deployment private until you create that account; otherwise, an outside visitor could register first.
+
 ## Project files
 
 - `index.html` — account forms and main app pages.

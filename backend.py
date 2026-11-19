@@ -8,11 +8,51 @@ from pathlib import Path
 from flask import Flask, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from database import event_dict, get_current_user, get_db, get_user, init_db, public_user
+from database import (
+    count_users,
+    create_report as db_create_report,
+    delete_event as db_delete_event,
+    delete_group as db_delete_group,
+    get_current_user,
+    get_db,
+    get_user_by_email,
+    init_db,
+    insert_event,
+    insert_group,
+    insert_group_message,
+    join_group as join_group_record,
+    list_admin_events,
+    list_admin_reports,
+    list_admin_users,
+    list_events,
+    list_group_messages,
+    list_groups,
+    public_user,
+    register_user,
+    toggle_event_rsvp as toggle_event_rsvp_record,
+    update_event_status,
+    update_group_status,
+    update_report as update_report_record,
+    update_user_account,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CATEGORIES = {"Tech & AI", "Arts & Culture", "Sports", "Academic"}
+CATEGORIES = {
+    "Tech & AI",
+    "Arts & Culture",
+    "Sports",
+    "Academic",
+    "Career & Professional Development",
+    "Clubs & Organizations",
+    "Community Service",
+    "Health & Wellness",
+    "Social & Entertainment",
+}
+ALLOWED_ORIGINS = {
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+}
 
 
 def create_app(test_config=None):
@@ -51,10 +91,9 @@ def create_app(test_config=None):
                 return api_error("Invalid or expired request token. Refresh and try again.", 400)
 
     @app.after_request
-    def allow_live_server_origin(response):
+    def allow_configured_origin(response):
         origin = request.headers.get("Origin")
-        allowed_origins = {"http://127.0.0.1:5500", "http://localhost:5500"}
-        if request.path.startswith("/api/") and origin in allowed_origins:
+        if request.path.startswith("/api/") and origin in ALLOWED_ORIGINS:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-CSRF-Token"
@@ -114,7 +153,7 @@ def create_app(test_config=None):
         if "csrf_token" not in session:
             session["csrf_token"] = secrets.token_urlsafe(32)
         user = get_current_user()
-        user_count = get_db().execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        user_count = count_users()
         return jsonify({
             "csrf_token": session["csrf_token"],
             "setup_required": user_count == 0,
@@ -136,18 +175,9 @@ def create_app(test_config=None):
         if not name or not email or "@" not in email or not isinstance(password, str) or len(password) < 12:
             return api_error("Enter your name, a valid email address, and a password of at least 12 characters.", 400)
 
-        db = get_db()
-        db.execute("BEGIN IMMEDIATE")
-        if db.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
-            db.rollback()
+        user = register_user(name, email, generate_password_hash(password))
+        if user is None:
             return api_error("An account with that email already exists.", 409)
-        role = "admin" if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0 else "user"
-        cursor = db.execute(
-            "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-            (name, email, generate_password_hash(password), role),
-        )
-        db.commit()
-        user = get_user(cursor.lastrowid)
         establish_session(user["id"])
         return jsonify({"user": public_user(user)}), 201
 
@@ -157,7 +187,7 @@ def create_app(test_config=None):
             return api_error("Send your email and password as JSON.", 400)
         email = clean_text(payload.get("email"), 254).lower()
         password = payload.get("password")
-        user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        user = get_user_by_email(email)
         if (
             user is None
             or not isinstance(password, str)
@@ -187,24 +217,10 @@ def create_app(test_config=None):
     @app.get("/api/events")
     @login_required
     def events():
-        if g.current_user["role"] == "admin":
-            rows = get_db().execute(
-                "SELECT e.*, u.name AS creator_name, COUNT(DISTINCT r.user_id) AS attendee_count, "
-                "MAX(CASE WHEN r.user_id = ? THEN 1 ELSE 0 END) AS is_joined "
-                "FROM events e JOIN users u ON u.id = e.created_by "
-                "LEFT JOIN event_rsvps r ON r.event_id = e.id GROUP BY e.id ORDER BY e.starts_at",
-                (g.current_user["id"],),
-            ).fetchall()
-        else:
-            rows = get_db().execute(
-                "SELECT e.*, u.name AS creator_name, COUNT(DISTINCT r.user_id) AS attendee_count, "
-                "MAX(CASE WHEN r.user_id = ? THEN 1 ELSE 0 END) AS is_joined "
-                "FROM events e JOIN users u ON u.id = e.created_by "
-                "LEFT JOIN event_rsvps r ON r.event_id = e.id "
-                "WHERE e.status = 'approved' GROUP BY e.id ORDER BY e.starts_at",
-                (g.current_user["id"],),
-            ).fetchall()
-        return jsonify([event_dict(row) for row in rows])
+        return jsonify(list_events(
+            g.current_user["id"],
+            include_unapproved=g.current_user["role"] == "admin",
+        ))
 
     @app.post("/api/events")
     @login_required
@@ -214,47 +230,66 @@ def create_app(test_config=None):
         if event_data is None:
             return api_error("Provide a title, valid category, date and time, and location.", 400)
         status_value = "approved" if g.current_user["role"] == "admin" else "pending"
-        cursor = get_db().execute(
-            "INSERT INTO events (title, category, starts_at, location, description, created_by, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (*event_data, g.current_user["id"], status_value),
-        )
-        get_db().commit()
-        return jsonify({"id": cursor.lastrowid, "status": status_value}), 201
+        event_id = insert_event(event_data, g.current_user["id"], status_value)
+        return jsonify({"id": event_id, "status": status_value}), 201
 
     @app.post("/api/events/<int:event_id>/rsvp")
     @login_required
     def toggle_rsvp(event_id):
-        db = get_db()
-        if db.execute("SELECT 1 FROM events WHERE id = ? AND status = 'approved'", (event_id,)).fetchone() is None:
+        joined = toggle_event_rsvp_record(event_id, g.current_user["id"])
+        if joined is None:
             return api_error("That event is not available.", 404)
-        existing = db.execute(
-            "SELECT 1 FROM event_rsvps WHERE event_id = ? AND user_id = ?",
-            (event_id, g.current_user["id"]),
-        ).fetchone()
-        if existing:
-            db.execute("DELETE FROM event_rsvps WHERE event_id = ? AND user_id = ?", (event_id, g.current_user["id"]))
-        else:
-            db.execute("INSERT INTO event_rsvps (event_id, user_id) VALUES (?, ?)", (event_id, g.current_user["id"]))
-        db.commit()
-        return jsonify({"joined": existing is None})
+        return jsonify({"joined": joined})
 
     @app.get("/api/groups")
     @login_required
     def groups():
-        rows = get_db().execute(
-            "SELECT groups.*, users.name AS creator_name FROM groups "
-            "JOIN users ON users.id = groups.created_by ORDER BY groups.name"
-        ).fetchall()
-        return jsonify([dict(row) for row in rows])
+        return jsonify(list_groups(
+            g.current_user["id"],
+            is_admin=g.current_user["role"] == "admin",
+        ))
+
+    @app.post("/api/groups")
+    @login_required
+    def request_group():
+        payload = json_payload()
+        group_data = valid_group(payload)
+        if group_data is None:
+            return api_error("Provide a group name, valid category, and description.", 400)
+        group_id = insert_group(group_data, g.current_user["id"], "pending")
+        return jsonify({"id": group_id, "status": "pending"}), 201
+
+    @app.post("/api/groups/<int:group_id>/join")
+    @login_required
+    def join_group(group_id):
+        if not join_group_record(group_id, g.current_user["id"]):
+            return api_error("That group is not available to join.", 404)
+        return jsonify({"joined": True})
+
+    @app.get("/api/groups/<int:group_id>/messages")
+    @login_required
+    def group_messages(group_id):
+        messages = list_group_messages(group_id, g.current_user["id"])
+        if messages is None:
+            return api_error("Join this group to view its chat.", 403)
+        return jsonify(messages)
+
+    @app.post("/api/groups/<int:group_id>/messages")
+    @login_required
+    def send_group_message(group_id):
+        payload = json_payload()
+        content = clean_text(payload.get("content"), 2000) if payload else ""
+        if not content:
+            return api_error("Write a message before sending it.", 400)
+        message_id = insert_group_message(group_id, g.current_user["id"], content)
+        if message_id is None:
+            return api_error("Join this group to send messages.", 403)
+        return jsonify({"id": message_id}), 201
 
     @app.get("/api/admin/users")
     @admin_required
     def admin_users():
-        rows = get_db().execute(
-            "SELECT id, name, email, role, status, created_at FROM users ORDER BY created_at DESC"
-        ).fetchall()
-        return jsonify([dict(row) for row in rows])
+        return jsonify(list_admin_users())
 
     @app.patch("/api/admin/users/<int:user_id>")
     @admin_required
@@ -275,50 +310,26 @@ def create_app(test_config=None):
         if status_value is None and role_value is None:
             return api_error("Provide a role or account status to update.", 400)
 
-        db = get_db()
-        db.execute("BEGIN IMMEDIATE")
-        target = db.execute("SELECT role, status FROM users WHERE id = ?", (user_id,)).fetchone()
-        if target is None:
-            db.rollback()
-            return api_error("User not found.", 404)
-        next_status = status_value if status_value is not None else target["status"]
-        next_role = role_value if role_value is not None else target["role"]
-        if user_id == g.current_user["id"] and (next_status != "active" or next_role != "admin"):
-            db.rollback()
-            return api_error("You cannot disable or demote your own administrator account.", 400)
-        is_promoting_user = target["role"] != "admin" and next_role == "admin"
-        if is_promoting_user:
-            admin_count = db.execute(
-                "SELECT COUNT(*) FROM users WHERE role = 'admin'"
-            ).fetchone()[0]
-            if admin_count >= 3:
-                db.rollback()
-                return api_error("This app allows a maximum of 3 administrator accounts.", 400)
-        is_removing_active_admin = (
-            target["role"] == "admin"
-            and target["status"] == "active"
-            and (next_role != "admin" or next_status != "active")
+        result = update_user_account(
+            user_id,
+            g.current_user["id"],
+            status_value,
+            role_value,
         )
-        if is_removing_active_admin:
-            active_admins = db.execute(
-                "SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active'"
-            ).fetchone()[0]
-            if active_admins <= 1:
-                db.rollback()
-                return api_error("At least one active administrator must remain.", 400)
-        db.execute("UPDATE users SET status = ?, role = ? WHERE id = ?", (next_status, next_role, user_id))
-        db.commit()
+        if result == "not_found":
+            return api_error("User not found.", 404)
+        if result == "self_change":
+            return api_error("You cannot disable or demote your own administrator account.", 400)
+        if result == "admin_limit":
+            return api_error("This app allows a maximum of 3 administrator accounts.", 400)
+        if result == "last_admin":
+            return api_error("At least one active administrator must remain.", 400)
         return jsonify({"ok": True})
 
     @app.get("/api/admin/events")
     @admin_required
     def admin_events():
-        rows = get_db().execute(
-            "SELECT e.*, u.name AS creator_name, COUNT(DISTINCT r.user_id) AS attendee_count, 0 AS is_joined "
-            "FROM events e JOIN users u ON u.id = e.created_by "
-            "LEFT JOIN event_rsvps r ON r.event_id = e.id GROUP BY e.id ORDER BY e.created_at DESC"
-        ).fetchall()
-        return jsonify([event_dict(row) for row in rows])
+        return jsonify(list_admin_events())
 
     @app.patch("/api/admin/events/<int:event_id>")
     @admin_required
@@ -327,18 +338,14 @@ def create_app(test_config=None):
         status_value = payload.get("status") if payload else None
         if status_value not in {"pending", "approved", "rejected"}:
             return api_error("Choose pending, approved, or rejected.", 400)
-        cursor = get_db().execute("UPDATE events SET status = ? WHERE id = ?", (status_value, event_id))
-        get_db().commit()
-        if cursor.rowcount == 0:
+        if not update_event_status(event_id, status_value):
             return api_error("Event not found.", 404)
         return jsonify({"ok": True})
 
     @app.delete("/api/admin/events/<int:event_id>")
     @admin_required
     def delete_event(event_id):
-        cursor = get_db().execute("DELETE FROM events WHERE id = ?", (event_id,))
-        get_db().commit()
-        if cursor.rowcount == 0:
+        if not db_delete_event(event_id):
             return api_error("Event not found.", 404)
         return jsonify({"ok": True})
 
@@ -346,26 +353,27 @@ def create_app(test_config=None):
     @admin_required
     def create_group():
         payload = json_payload()
-        if payload is None:
-            return api_error("Send group details as JSON.", 400)
-        name = clean_text(payload.get("name"), 100)
-        category = clean_text(payload.get("category"), 40)
-        description = clean_text(payload.get("description"), 500)
-        if not name or category not in CATEGORIES or not description:
+        group_data = valid_group(payload)
+        if group_data is None:
             return api_error("Provide a group name, valid category, and description.", 400)
-        cursor = get_db().execute(
-            "INSERT INTO groups (name, category, description, created_by) VALUES (?, ?, ?, ?)",
-            (name, category, description, g.current_user["id"]),
-        )
-        get_db().commit()
-        return jsonify({"id": cursor.lastrowid}), 201
+        group_id = insert_group(group_data, g.current_user["id"], "approved")
+        return jsonify({"id": group_id, "status": "approved"}), 201
+
+    @app.patch("/api/admin/groups/<int:group_id>")
+    @admin_required
+    def update_group(group_id):
+        payload = json_payload()
+        status_value = payload.get("status") if payload else None
+        if status_value not in {"pending", "approved", "rejected"}:
+            return api_error("Choose pending, approved, or rejected.", 400)
+        if not update_group_status(group_id, status_value):
+            return api_error("Group not found.", 404)
+        return jsonify({"ok": True})
 
     @app.delete("/api/admin/groups/<int:group_id>")
     @admin_required
     def delete_group(group_id):
-        cursor = get_db().execute("DELETE FROM groups WHERE id = ?", (group_id,))
-        get_db().commit()
-        if cursor.rowcount == 0:
+        if not db_delete_group(group_id):
             return api_error("Group not found.", 404)
         return jsonify({"ok": True})
 
@@ -378,25 +386,14 @@ def create_app(test_config=None):
         reason = clean_text(payload.get("reason"), 500) if payload else ""
         if target_type != "event" or not isinstance(target_id, int) or not reason:
             return api_error("Provide an event and a short reason for the report.", 400)
-        if get_db().execute("SELECT 1 FROM events WHERE id = ?", (target_id,)).fetchone() is None:
+        if not db_create_report(g.current_user["id"], target_id, reason):
             return api_error("Event not found.", 404)
-        get_db().execute(
-            "INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)",
-            (g.current_user["id"], target_type, target_id, reason),
-        )
-        get_db().commit()
         return jsonify({"ok": True}), 201
 
     @app.get("/api/admin/reports")
     @admin_required
     def admin_reports():
-        rows = get_db().execute(
-            "SELECT reports.*, users.name AS reporter_name, events.title AS event_title "
-            "FROM reports JOIN users ON users.id = reports.reporter_id "
-            "LEFT JOIN events ON reports.target_type = 'event' AND events.id = reports.target_id "
-            "ORDER BY reports.created_at DESC"
-        ).fetchall()
-        return jsonify([dict(row) for row in rows])
+        return jsonify(list_admin_reports())
 
     @app.patch("/api/admin/reports/<int:report_id>")
     @admin_required
@@ -405,12 +402,7 @@ def create_app(test_config=None):
         status_value = payload.get("status") if payload else None
         if status_value not in {"open", "resolved", "dismissed"}:
             return api_error("Choose open, resolved, or dismissed.", 400)
-        cursor = get_db().execute(
-            "UPDATE reports SET status = ?, reviewed_by = ? WHERE id = ?",
-            (status_value, g.current_user["id"], report_id),
-        )
-        get_db().commit()
-        if cursor.rowcount == 0:
+        if not update_report_record(report_id, status_value, g.current_user["id"]):
             return api_error("Report not found.", 404)
         return jsonify({"ok": True})
 
@@ -446,6 +438,17 @@ def valid_event(payload):
     return title, category, starts_at, location, description
 
 
+def valid_group(payload):
+    if not isinstance(payload, dict):
+        return None
+    name = clean_text(payload.get("name"), 100)
+    category = clean_text(payload.get("category"), 40)
+    description = clean_text(payload.get("description"), 500)
+    if not name or category not in CATEGORIES or not description:
+        return None
+    return name, category, description
+
+
 def json_payload():
     payload = request.get_json(silent=True)
     return payload if isinstance(payload, dict) else None
@@ -459,4 +462,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "8000")), debug=False)
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "5500")), debug=False)

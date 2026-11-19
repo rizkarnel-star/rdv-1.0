@@ -1,12 +1,12 @@
 let csrfToken = "";
 let setupRequired = false;
+let currentUser = null;
 let events = [];
+let groups = [];
+let activeGroupId = null;
 let currentEventFilter = "upcoming";
 const toast = document.getElementById("toast");
 const eventList = document.getElementById("eventList");
-const API_BASE_URL = location.port === "5500" && ["127.0.0.1", "localhost"].includes(location.hostname)
-  ? `${location.protocol}//${location.hostname}:8000`
-  : "";
 
 async function api(path, options) {
   const requestOptions = { credentials: "include", ...options };
@@ -18,7 +18,7 @@ async function api(path, options) {
   if (["POST", "PATCH", "DELETE"].includes(requestOptions.method || "GET")) {
     requestOptions.headers["X-CSRF-Token"] = csrfToken;
   }
-  const response = await fetch(`${API_BASE_URL}${path}`, requestOptions);
+  const response = await fetch(path, requestOptions);
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "The request could not be completed.");
   return result;
@@ -60,6 +60,7 @@ function setAuthMode(mode) {
 }
 
 function setAuthenticated(user) {
+  currentUser = user;
   document.getElementById("authScreen").classList.toggle("hidden", Boolean(user));
   document.getElementById("appShell").classList.toggle("hidden", !user);
   if (!user) return;
@@ -148,15 +149,86 @@ async function loadEvents() {
 }
 
 async function loadGroups() {
-  const groups = await api("/api/groups");
-  const markup = groups.length ? groups.map((group) => `
+  groups = await api("/api/groups");
+  const myGroups = groups.filter((group) => (
+    group.is_joined || (group.created_by === currentUser.id && group.status !== "approved")
+  ));
+  const discoverGroups = groups.filter((group) => (
+    group.status === "approved" && !group.is_joined
+  ));
+  const renderGroupCards = (items, emptyMessage) => items.length ? items.map((group) => `
     <article class="group-card">
       <div class="group-art purple-art" aria-hidden="true">✦</div><span class="tag">${escapeHtml(group.category)}</span>
       <h3>${escapeHtml(group.name)}</h3><p>${escapeHtml(group.description)}</p>
-      <div class="card-footer"><span>Created by ${escapeHtml(group.creator_name)}</span></div>
-    </article>`).join("") : '<div class="empty-state">No groups have been created yet.</div>';
-  document.getElementById("groupList").innerHTML = markup;
+      <div class="card-footer"><span>Created by ${escapeHtml(group.creator_name)} · ${group.member_count} members</span></div>
+      <div class="group-actions">
+        ${group.status !== "approved"
+          ? `<span class="group-status ${escapeHtml(group.status)}">${group.status === "pending" ? "Awaiting admin approval" : "Request not approved"}</span>`
+          : group.is_joined
+            ? `<button class="join-button" type="button" data-open-chat="${group.id}">Open chat</button>`
+            : `<button class="join-button" type="button" data-group-join="${group.id}">Join group</button>`}
+      </div>
+    </article>`).join("") : `<div class="empty-state">${emptyMessage}</div>`;
+  document.getElementById("myGroupCount").textContent = `(${myGroups.length})`;
+  document.getElementById("discoverGroupCount").textContent = `(${discoverGroups.length})`;
+  document.getElementById("myGroupList").innerHTML = renderGroupCards(
+    myGroups,
+    "You haven't joined or created any groups yet.",
+  );
+  document.getElementById("discoverGroupList").innerHTML = renderGroupCards(
+    discoverGroups,
+    "No groups are available to join right now.",
+  );
+  const chatGroupList = document.getElementById("chatGroupList");
+  chatGroupList.innerHTML = myGroups.filter((group) => group.is_joined).length
+    ? myGroups.filter((group) => group.is_joined).map((group) => `
+      <button class="chat-person ${group.id === activeGroupId ? "active-chat" : ""}" type="button"
+        data-chat-group="${group.id}" aria-current="${group.id === activeGroupId ? "true" : "false"}">
+        <span class="avatar purple-avatar" aria-hidden="true">✦</span>
+        <span><strong>${escapeHtml(group.name)}</strong><small>${group.member_count} members</small></span>
+      </button>`).join("")
+    : '<div class="empty-state">No group chats yet. Join a group to start chatting.</div>';
 }
+
+function applyTheme(isDark) {
+  document.body.classList.toggle("dark-mode", isDark);
+  document.getElementById("darkModeToggle").checked = isDark;
+  localStorage.setItem("rdv-theme", isDark ? "dark" : "light");
+}
+
+async function loadGroupMessages() {
+  if (!activeGroupId) return;
+  const messages = await api(`/api/groups/${activeGroupId}/messages`);
+  const container = document.getElementById("groupMessages");
+  container.innerHTML = messages.length ? messages.map((message) => `
+    <article class="group-message ${message.user_id === currentUser.id ? "mine" : ""}">
+      <strong>${escapeHtml(message.sender_name)}</strong>
+      <p>${escapeHtml(message.content)}</p>
+      <small>${escapeHtml(new Date(`${message.created_at.replace(" ", "T")}Z`).toLocaleString())}</small>
+    </article>`).join("") : '<div class="empty-state">No messages yet. Start the conversation.</div>';
+  container.scrollTop = container.scrollHeight;
+}
+
+async function openGroupChat(groupId) {
+  const group = groups.find((item) => item.id === groupId && item.is_joined);
+  if (!group) {
+    showToast("Join this group before opening its chat.");
+    return;
+  }
+  activeGroupId = groupId;
+  document.getElementById("groupChatTitle").textContent = group.name;
+  document.getElementById("groupMessageForm").classList.remove("hidden");
+  document.querySelectorAll("[data-chat-group]").forEach((button) => {
+    const isActive = Number(button.dataset.chatGroup) === activeGroupId;
+    button.classList.toggle("active-chat", isActive);
+    button.setAttribute("aria-current", isActive ? "true" : "false");
+  });
+  await loadGroupMessages();
+}
+
+document.getElementById("darkModeToggle").checked = localStorage.getItem("rdv-theme") === "dark";
+document.body.classList.toggle("dark-mode", document.getElementById("darkModeToggle").checked);
+document.getElementById("darkModeToggle").addEventListener("change", (event) => applyTheme(event.currentTarget.checked));
 
 document.getElementById("authToggle").addEventListener("click", (event) => setAuthMode(event.currentTarget.dataset.mode));
 document.getElementById("adminLoginToggle").addEventListener("click", () => setAuthMode("admin-login"));
@@ -189,7 +261,7 @@ async function signOut() {
 document.getElementById("logoutButton").addEventListener("click", signOut);
 document.getElementById("settingsSignOut").addEventListener("click", signOut);
 
-document.querySelectorAll(".nav-item[data-page], .quick-links button[data-page], .settings-list button[data-page]").forEach((button) => {
+document.querySelectorAll(".nav-item[data-page], .quick-links button[data-page], .settings-list button[data-page], #chatsPage [data-page]").forEach((button) => {
   button.addEventListener("click", () => showPage(button.dataset.page));
 });
 document.getElementById("filterButton").addEventListener("click", () => document.getElementById("filterPanel").classList.toggle("hidden"));
@@ -225,13 +297,64 @@ document.getElementById("closeHostModal").addEventListener("click", () => hostMo
 hostModal.addEventListener("click", (event) => { if (event.target === hostModal) hostModal.classList.add("hidden"); });
 document.getElementById("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form));
   try {
     const result = await api("/api/events", { method: "POST", body: payload });
-    event.currentTarget.reset();
+    form.reset();
     hostModal.classList.add("hidden");
     await loadEvents();
-    showToast(result.status === "approved" ? "Event published." : "Event submitted for administrator approval.");
+    showToast(result.status === "approved" ? "Event published." : "Event submitted and pending admin approval.");
+  } catch (error) { showToast(error.message); }
+});
+
+document.getElementById("groupRequestForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const result = await api("/api/groups", {
+      method: "POST",
+      body: Object.fromEntries(new FormData(form)),
+    });
+    form.reset();
+    await loadGroups();
+    showToast(result.status === "pending" ? "Group request sent for administrator approval." : "Group created.");
+  } catch (error) { showToast(error.message); }
+});
+
+document.getElementById("groupsPage").addEventListener("click", async (event) => {
+  const joinButton = event.target.closest("[data-group-join]");
+  const chatButton = event.target.closest("[data-open-chat]");
+  try {
+    if (joinButton) {
+      await api(`/api/groups/${joinButton.dataset.groupJoin}/join`, { method: "POST" });
+      await loadGroups();
+      showToast("You joined the group.");
+    }
+    if (chatButton) {
+      showPage("chats");
+      await openGroupChat(Number(chatButton.dataset.openChat));
+    }
+  } catch (error) { showToast(error.message); }
+});
+
+document.getElementById("chatGroupList").addEventListener("click", async (event) => {
+  const groupButton = event.target.closest("[data-chat-group]");
+  if (!groupButton) return;
+  try {
+    await openGroupChat(Number(groupButton.dataset.chatGroup));
+  } catch (error) { showToast(error.message); }
+});
+
+document.getElementById("groupMessageForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!activeGroupId) return;
+  const form = event.currentTarget;
+  const content = new FormData(form).get("content");
+  try {
+    await api(`/api/groups/${activeGroupId}/messages`, { method: "POST", body: { content } });
+    form.reset();
+    await loadGroupMessages();
   } catch (error) { showToast(error.message); }
 });
 

@@ -1,9 +1,6 @@
 let csrfToken = "";
 let currentUser = null;
 const adminToast = document.getElementById("adminToast");
-const API_BASE_URL = location.port === "5500" && ["127.0.0.1", "localhost"].includes(location.hostname)
-  ? `${location.protocol}//${location.hostname}:8000`
-  : "";
 
 async function api(path, options) {
   const requestOptions = { credentials: "include", ...options };
@@ -15,7 +12,7 @@ async function api(path, options) {
   if (["POST", "PATCH", "DELETE"].includes(requestOptions.method || "GET")) {
     requestOptions.headers["X-CSRF-Token"] = csrfToken;
   }
-  const response = await fetch(`${API_BASE_URL}${path}`, requestOptions);
+  const response = await fetch(path, requestOptions);
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "The request could not be completed.");
   return result;
@@ -60,7 +57,12 @@ async function loadAdminData() {
       </div>
     </article>`).join("") : '<div class="empty-state">No events to review.</div>';
   document.getElementById("adminGroupList").innerHTML = groups.length ? groups.map((group) => `
-    <article class="admin-card"><div><strong>${escapeHtml(group.name)}</strong><span>${escapeHtml(group.category)} · ${escapeHtml(group.description)}</span></div><button class="danger-button" type="button" data-delete-group="${group.id}">Delete</button></article>`).join("") : '<div class="empty-state">No groups yet. Create the first one above.</div>';
+    <article class="admin-card"><div><strong>${escapeHtml(group.name)}</strong><span>${escapeHtml(group.category)} · ${escapeHtml(group.description)}</span><small>${escapeHtml(group.status)} · Created by ${escapeHtml(group.creator_name)}</small></div>
+      <div class="admin-actions">
+        ${group.status === "pending" ? `<button class="secondary-button" type="button" data-group-status="${group.id}" data-next-group-status="approved">Approve</button><button class="danger-button" type="button" data-group-status="${group.id}" data-next-group-status="rejected">Reject</button>` : ""}
+        <button class="danger-button" type="button" data-delete-group="${group.id}">Delete</button>
+      </div>
+    </article>`).join("") : '<div class="empty-state">No groups yet. Create the first one above.</div>';
   document.getElementById("adminReportList").innerHTML = reports.length ? reports.map((report) => `
     <article class="admin-card"><div><strong>${escapeHtml(report.event_title || "Removed event")}</strong><span>Reported by ${escapeHtml(report.reporter_name)} · ${escapeHtml(report.reason)}</span><small>${escapeHtml(report.status)}</small></div>
       <select aria-label="Report status" data-report-status="${report.id}"><option ${report.status === "open" ? "selected" : ""}>open</option><option ${report.status === "resolved" ? "selected" : ""}>resolved</option><option ${report.status === "dismissed" ? "selected" : ""}>dismissed</option></select>
@@ -74,9 +76,10 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => button.addEve
 
 document.getElementById("groupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   try {
-    await api("/api/admin/groups", { method: "POST", body: Object.fromEntries(new FormData(event.currentTarget)) });
-    event.currentTarget.reset();
+    await api("/api/admin/groups", { method: "POST", body: Object.fromEntries(new FormData(form)) });
+    form.reset();
     await loadAdminData();
     showToast("Group created.");
   } catch (error) { showToast(error.message); }
@@ -109,7 +112,16 @@ document.getElementById("adminShell").addEventListener("click", async (event) =>
   const userButton = event.target.closest("[data-user-status]");
   const deleteEventButton = event.target.closest("[data-delete-event]");
   const deleteGroupButton = event.target.closest("[data-delete-group]");
+  const groupStatus = event.target.closest("[data-group-status]");
   try {
+    if (groupStatus) {
+      await api(`/api/admin/groups/${groupStatus.dataset.groupStatus}`, {
+        method: "PATCH",
+        body: { status: groupStatus.dataset.nextGroupStatus },
+      });
+      await loadAdminData();
+      showToast(groupStatus.dataset.nextGroupStatus === "approved" ? "Group approved." : "Group rejected.");
+    }
     if (userButton) {
       await api(`/api/admin/users/${userButton.dataset.userStatus}`, { method: "PATCH", body: { status: userButton.dataset.nextStatus } });
       await loadAdminData();
@@ -136,7 +148,7 @@ document.getElementById("adminLogoutButton").addEventListener("click", async () 
 });
 
 async function initializeAdminPanel() {
-  const response = await fetch(`${API_BASE_URL}/api/status`, { credentials: "include" });
+  const response = await fetch("/api/status", { credentials: "include" });
   const status = await response.json();
   if (!response.ok || !status.user || status.user.role !== "admin") {
     window.location.replace("/");

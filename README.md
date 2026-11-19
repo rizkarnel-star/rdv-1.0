@@ -1,6 +1,6 @@
 # Rendezvous
 
-A campus community app built with HTML, CSS, vanilla JavaScript, Python Flask, and SQLite. New users can create accounts, sign in, submit events, RSVP, and report events. Administrators can manage accounts, review events, create groups, and resolve reports.
+A campus community app built with HTML, CSS, vanilla JavaScript, Python Flask, and SQLite. Members can create accounts, submit events and group requests, RSVP, report events, join approved groups, and chat with group members. Administrators manage accounts, review event and group requests, and resolve reports.
 
 ## Run locally
 
@@ -18,25 +18,25 @@ A campus community app built with HTML, CSS, vanilla JavaScript, Python Flask, a
    python -m pip install -r requirements.txt
    ```
 
-4. Start the Flask API server in the VS Code terminal:
+4. Start the Flask app in the VS Code terminal:
 
    ```powershell
    python backend.py
    ```
 
-5. In VS Code, click **Go Live** to start Live Server on port 5500, then open `http://127.0.0.1:5500`.
+5. Open `http://127.0.0.1:5500` in your browser.
 
-Live Server serves the HTML/CSS/JavaScript on port 5500. Flask must remain running on port 8000 because it provides login, database, and admin APIs. The app allows this local Live Server origin only. The Flask server listens on the local computer only.
+Live Server serves the HTML/CSS/JavaScript on port 5500. Flask must remain running on port 8000 because it provides login, database, and admin APIs. The API accepts the local Live Server origins only.
 
 The first account created becomes the administrator; later accounts are regular members. Use a password with at least 12 characters. The database is created at `instance/rendezvous.sqlite3`.
 
-The app starts with no sample users, events, or groups. Administrators can add campus groups in the Admin panel. Members can submit events, which remain pending until an administrator approves them.
+The app starts with no sample users, events, or groups. Groups can be created in categories such as academics, career development, clubs, community service, health, and social activities; member-created groups remain pending until an administrator approves them. Members can join approved groups. Joined group conversations are available in the **Chats** tab. Members can select dark mode in **Settings → Appearance**; the preference is saved on the current device. Events use the same category options and are automatically approved when created.
 
 ## Admin features
 
 - View accounts and disable or re-enable regular member accounts.
 - Review, approve, reject, or delete events.
-- Create and delete campus groups.
+- Approve or reject member group requests, and create or delete campus groups.
 - Review event reports and mark them open, resolved, or dismissed.
 - Promote existing member accounts to administrator so multiple administrators can sign in.
 - A maximum of three accounts can have the administrator role.
@@ -75,7 +75,7 @@ Vercel is currently serving the static frontend; it does not automatically run t
 
    Without persistent storage, the deployed SQLite file may be lost on redeploy or restart. The current backend supports SQLite; using PostgreSQL would require adapting `database.py`.
 
-5. After Render deploys, copy the service URL shown on its dashboard (for example, `https://your-service.onrender.com`). That is the backend URL.
+5. After Render deploys, use the service URL shown in its dashboard.
 6. Add a `vercel.json` file at the project root and replace the example host below with that Render URL:
 
    ```json
@@ -100,7 +100,7 @@ The deployed backend starts with an empty database unless you migrate one. In th
 - `script.js` — browser interactions and API requests.
 - `admin.html`, `admin.css`, and `admin.js` — the standalone administrator page and its interface.
 - `backend.py` — Flask routes, authentication, authorization, and CSRF checks.
-- `database.py` — SQLite connection, schema initialization, and shared database row helpers.
+- `database.py` — SQLite connection, schema initialization/migrations, and all database queries and write operations.
 - `instance/rendezvous.sqlite3` — the SQLite data file created on first run.
 - `test_backend.py` — focused API and access-control tests.
 - `requirements.txt` — Python package dependencies.

@@ -50,7 +50,7 @@
       </div>
       <div id="filterPanel" class="filter-panel hidden">
         <label for="categoryFilter">Filter by category</label>
-        <select id="categoryFilter"><option value="all">All categories</option><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option></select>
+        <select id="categoryFilter"><option value="all">All categories</option><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option><option>Career &amp; Professional Development</option><option>Clubs &amp; Organizations</option><option>Community Service</option><option>Health &amp; Wellness</option><option>Social &amp; Entertainment</option></select>
       </div>
     </header>
 
@@ -71,11 +71,42 @@
         </div>
       </section>
 
-      <section class="page" id="chatsPage"><div class="page-heading"><p class="eyebrow">YOUR CONVERSATIONS</p><h2>Chats</h2><p class="muted">Messages will appear here when conversations are available.</p></div><div class="empty-state">No conversations yet.</div></section>
+      <section class="page" id="chatsPage">
+        <div class="page-heading"><p class="eyebrow">YOUR CONVERSATIONS</p><h2>Chats</h2><p class="muted">Group conversations for groups you’ve joined.</p></div>
+        <div class="chat-layout">
+          <div class="chat-list" id="chatGroupList" aria-label="Your group chats">
+            <div class="empty-state">Loading your group chats...</div>
+          </div>
+          <section class="chat-window" aria-label="Group conversation">
+            <div class="chat-title" id="groupChatTitle">Select a group to view its chat</div>
+            <div id="groupMessages" class="group-messages" aria-live="polite">
+              <div class="empty-state">Join a group to start chatting with its members.</div>
+            </div>
+            <form id="groupMessageForm" class="message-form hidden">
+              <input name="content" aria-label="Message" placeholder="Write a message..." required maxlength="2000" />
+              <button type="submit">Send</button>
+            </form>
+          </section>
+        </div>
+      </section>
 
       <section class="page" id="groupsPage">
-        <div class="page-heading"><p class="eyebrow">CAMPUS COMMUNITIES</p><h2>Groups</h2><p class="muted">Groups created by your campus administrators.</p></div>
-        <div id="groupList" class="group-grid"><div class="empty-state">Loading groups...</div></div>
+        <div class="page-heading"><p class="eyebrow">CAMPUS COMMUNITIES</p><h2>Groups</h2><p class="muted">Create a group for the community. An administrator must approve it before members can join.</p></div>
+        <form id="groupRequestForm" class="group-request-form">
+          <h3>Create a group</h3>
+          <label>Group name<input name="name" required maxlength="100" /></label>
+          <label>Category<select name="category" required><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option><option>Career &amp; Professional Development</option><option>Clubs &amp; Organizations</option><option>Community Service</option><option>Health &amp; Wellness</option><option>Social &amp; Entertainment</option></select></label>
+          <label>Description<textarea name="description" required maxlength="500" rows="2"></textarea></label>
+          <button class="primary-button" type="submit">Request group approval</button>
+        </form>
+        <section class="group-section" aria-labelledby="myGroupsHeading">
+          <div class="group-section-heading"><h3 id="myGroupsHeading">My groups</h3><span id="myGroupCount" class="muted"></span></div>
+          <div id="myGroupList" class="group-grid"><div class="empty-state">Loading groups...</div></div>
+        </section>
+        <section class="group-section" aria-labelledby="discoverGroupsHeading">
+          <div class="group-section-heading"><h3 id="discoverGroupsHeading">Discover groups</h3><span id="discoverGroupCount" class="muted"></span></div>
+          <div id="discoverGroupList" class="group-grid"><div class="empty-state">Loading groups...</div></div>
+        </section>
       </section>
 
       <section class="page" id="connectPage"><div class="page-heading"><p class="eyebrow">MEET YOUR CAMPUS</p><h2>Connect</h2><p class="muted">Student connections will appear here when available.</p></div><div class="empty-state">No student profiles to show yet.</div></section>
@@ -89,7 +120,10 @@
       </section>
 
       <section class="page simple-page" id="calendarPage"><p class="eyebrow">PLAN AHEAD</p><h2>My Calendar</h2><p class="muted">Events you RSVP to will appear here.</p><div id="calendarEvents" class="empty-state">You haven't joined any events yet.</div></section>
-      <section class="page simple-page" id="settingsPage"><p class="eyebrow">YOUR ACCOUNT</p><h2>Settings</h2><div class="settings-list"><button type="button" id="settingsSignOut">↪ <span>Sign out</span> ›</button></div></section>
+      <section class="page simple-page" id="settingsPage"><p class="eyebrow">YOUR ACCOUNT</p><h2>Settings</h2><div class="settings-list">
+        <div class="appearance-setting"><div><strong>Appearance</strong><small>Choose how Rendezvous looks on this device.</small></div><label class="theme-toggle"><span>Dark mode</span><input id="darkModeToggle" type="checkbox" /><span class="toggle-track" aria-hidden="true"></span></label></div>
+        <button type="button" id="settingsSignOut">↪ <span>Sign out</span> ›</button>
+      </div></section>
       <section class="page simple-page" id="helpPage"><p class="eyebrow">WE'RE HERE TO HELP</p><h2>Help &amp; About</h2><div class="help-card"><h3>Rendezvous</h3><p>A campus community space to discover events, join groups and meet people.</p><p class="muted">Contact your campus administrator for support.</p></div></section>
 
     </main>
@@ -109,7 +143,7 @@
       <button type="button" class="close-modal" id="closeHostModal" aria-label="Close">×</button>
       <p class="eyebrow">BRING PEOPLE TOGETHER</p><h2>Host an event</h2>
       <label>Event name<input name="title" required maxlength="120" /></label>
-      <label>Category<select name="category"><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option></select></label>
+      <label>Category<select name="category"><option>Tech &amp; AI</option><option>Arts &amp; Culture</option><option>Sports</option><option>Academic</option><option>Career &amp; Professional Development</option><option>Clubs &amp; Organizations</option><option>Community Service</option><option>Health &amp; Wellness</option><option>Social &amp; Entertainment</option></select></label>
       <label>Date and time<input name="starts_at" type="datetime-local" required /></label>
       <label>Location<input name="location" required maxlength="160" /></label>
       <label>Description<textarea name="description" maxlength="1000" rows="3"></textarea></label>
